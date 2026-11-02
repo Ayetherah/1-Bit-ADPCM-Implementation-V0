@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1dpcm player</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: #c0c0c0; /* Entire window is now the app */
+    font-family: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, sans-serif;
+    font-size: 12px;
+    color: #000;
+  }
+
+  body {
+    display: flex;
+    align-items: flex-start; /* Top-aligned, not centered like a dialog */
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+
+  /* No box, no background, no borders — just layout */
+  .player {
+    background: transparent;
+    width: min(560px, 100%);
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  h1 {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0 0 8px;
+    color: #000;
+  }
+
+  /* ---- dropzone: fixed-size sunken input, never resizes ---- */
+  .dropzone {
+    background: #ffffff;
+    height: 96px;
+    padding: 12px;
+    box-sizing: border-box;
+    line-height: 72px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #000;
+    cursor: pointer;
+    margin-bottom: 10px;
+    border-top: 1px solid #808080;
+    border-left: 1px solid #808080;
+    border-right: 1px solid #ffffff;
+    border-bottom: 1px solid #ffffff;
+    box-shadow: inset 1px 1px 0 #000;
+    user-select: none;
+    outline: none;
+  }
+  .dropzone:hover, .dropzone.drag { background: #e8e8e8; }
+  .dropzone.loaded {
+    text-align: left;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  button {
+    background: #c0c0c0;
+    color: #000;
+    border-top: 1px solid #ffffff;
+    border-left: 1px solid #ffffff;
+    border-right: 1px solid #000000;
+    border-bottom: 1px solid #000000;
+    box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 3px 10px;
+    cursor: pointer;
+    border-radius: 0;
+    flex-shrink: 0;
+    outline: none;
+  }
+  button:active:not(:disabled) {
+    border-top-color: #000000;
+    border-left-color: #000000;
+    border-right-color: #ffffff;
+    border-bottom-color: #ffffff;
+    box-shadow: inset 1px 1px 0 #808080;
+  }
+  button:disabled {
+    color: #808080;
+    text-shadow: 1px 1px 0 #ffffff;
+    cursor: default;
+  }
+
+  #playBtn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .time {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 12px;
+    color: #000;
+    background: #ffffff;
+    border-top: 1px solid #808080;
+    border-left: 1px solid #808080;
+    border-right: 1px solid #ffffff;
+    border-bottom: 1px solid #ffffff;
+    box-shadow: inset 1px 1px 0 #000;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    min-width: 100px;
+    text-align: center;
+    outline: none;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    height: 24px;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    min-width: 0;
+  }
+  input[type=range]:disabled { cursor: default; opacity: 0.6; }
+
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #808080;
+    border: none;
+    box-shadow: inset 1px 1px 0 #000, inset -1px -1px 0 #ffffff;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px;
+    height: 22px;
+    background: #c0c0c0;
+    border-top: 1px solid #ffffff;
+    border-left: 1px solid #ffffff;
+    border-right: 1px solid #000000;
+    border-bottom: 1px solid #000000;
+    box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080;
+    margin-top: -9px;
+    border-radius: 0;
+  }
+  input[type=range]::-moz-range-track {
+    height: 4px;
+    background: #808080;
+    border: none;
+    box-shadow: inset 1px 1px 0 #000, inset -1px -1px 0 #ffffff;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 9px;
+    height: 20px;
+    background: #c0c0c0;
+    border-radius: 0;
+    border-top: 1px solid #ffffff;
+    border-left: 1px solid #ffffff;
+    border-right: 1px solid #000000;
+    border-bottom: 1px solid #000000;
+    box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080;
+  }
+
+  #seek  { flex: 1; }
+  #speed { flex: 1; }
+  #vol   { flex: 0 0 88px; }
+
+  .label {
+    flex-shrink: 0;
+    color: #000;
+    font-size: 12px;
+  }
+
+  .rate-label {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 12px;
+    color: #000;
+    min-width: 46px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .status {
+    font-size: 12px;
+    color: #000;
+    margin-top: 8px;
+    padding: 2px 0;
+    min-height: 1em;
+    word-break: break-word;
+  }
+  .status.error { color: #800000; }
+
+  .hint {
+    font-size: 11px;
+    color: #404040;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="player">
+  <h1>1dpcm player</h1>
+  <div class="dropzone" id="drop" tabindex="0">Drop a .1dpcm file here, or click to choose</div>
+  <input type="file" id="fileInput" accept=".1dpcm,.bin,.dat,*/*" hidden>
+
+  <div class="row">
+    <button id="playBtn" disabled title="Play / pause (space)">▶</button>
+    <div class="time" id="time">0:00 / 0:00</div>
+    <input type="range" id="seek" min="0" max="1" step="0.001" value="0" disabled>
+  </div>
+
+  <div class="row">
+    <span class="label">Speed</span>
+    <input type="range" id="speed" min="0" max="1000" value="500" step="1">
+    <span class="rate-label" id="rateLabel">1.00×</span>
+    <span class="label">Vol</span>
+    <input type="range" id="vol" min="0" max="1" step="0.01" value="1">
+  </div>
+
+  <div class="status" id="status">No file loaded.</div>
+  <div class="hint">Space = play/pause &nbsp;·&nbsp; ← → = seek 5 s</div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  const HEADER       = '1dpcm-0ver-192khz-2chan';
+  const SR           = 192000;
+  const CHANNELS     = 2;
+  const INITIAL_STEP = 0.005;
+  const GROWTH       = 1.1;
+  const DECAY        = 0.9;
+  const MIN_STEP     = 0.0001;
+  const MAX_STEP     = 0.5;
+  const RATE_MIN     = 0.25;
+  const RATE_MAX     = 4.0;
+
+  const dropEl    = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const playBtn   = document.getElementById('playBtn');
+  const timeEl    = document.getElementById('time');
+  const seekEl    = document.getElementById('seek');
+  const speedEl   = document.getElementById('speed');
+  const rateLbl   = document.getElementById('rateLabel');
+  const volEl     = document.getElementById('vol');
+  const statusEl  = document.getElementById('status');
+
+  let ctx       = null;
+  let gain      = null;
+  let buffer    = null;
+  let source    = null;
+  let startedAt = 0;
+  let offset    = 0;
+  let duration  = 0;
+  let playing   = false;
+  let seeking   = false;
+  let rafId     = null;
+  let rate      = 1.0;
+
+  function fmtTime(t) {
+    if (!isFinite(t) || t < 0) t = 0;
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function updateTime(pos) {
+    if (pos === undefined) pos = currentPos();
+    timeEl.textContent = fmtTime(pos) + ' / ' + fmtTime(duration);
+  }
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('error', !!isErr);
+  }
+  function currentPos() {
+    if (!playing) return offset;
+    return Math.min(offset + (ctx.currentTime - startedAt) * rate, duration);
+  }
+  function sliderToRate(v) {
+    return RATE_MIN * Math.pow(RATE_MAX / RATE_MIN, v / 1000);
+  }
+
+  function ensureCtx() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      gain = ctx.createGain();
+      gain.gain.value = parseFloat(volEl.value);
+      gain.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function decodeInto(L, R, bytes) {
+    const frames = L.length;
+    const totalBits = frames * 2;
+    const pred = [0, 0];
+    const step = [INITIAL_STEP, INITIAL_STEP];
+    const prev = [-1, -1];
+    let i = 0;
+    for (let bi = 0; bi < bytes.length && i < totalBits; bi++) {
+      const b = bytes[bi];
+      for (let sh = 7; sh >= 0 && i < totalBits; sh--) {
+        const bit = (b >> sh) & 1;
+        const ch  = i & 1;
+        let p = pred[ch] + (bit ? step[ch] : -step[ch]);
+        pred[ch] = p;
+        if (p >  1) p =  1;
+        if (p < -1) p = -1;
+        if (ch === 0) L[i >>> 1] = p;
+        else          R[i >>> 1] = p;
+        const pb = prev[ch];
+        if (pb !== -1) {
+          if (bit === pb) {
+            const ns = step[ch] * GROWTH;
+            step[ch] = ns < MAX_STEP ? ns : MAX_STEP;
+          } else {
+            const ns = step[ch] * DECAY;
+            step[ch] = ns > MIN_STEP ? ns : MIN_STEP;
+          }
+        }
+        prev[ch] = bit;
+        i++;
+      }
+    }
+  }
+
+  async function loadFile(file) {
+    stopSource();
+    playing = false;
+    buffer = null;
+    duration = 0;
+    offset = 0;
+    updatePlayBtn();
+    playBtn.disabled = true;
+    seekEl.disabled = true;
+    seekEl.max = '1';
+    seekEl.value = '0';
+    updateTime(0);
+    setStatus('Reading ' + file.name + ' ...');
+
+    let bytes;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } catch (e) {
+      setStatus('Read error: ' + e.message, true);
+      return;
+    }
+
+    let nl = -1;
+    const scanTo = Math.min(bytes.length, 256);
+    for (let i = 0; i < scanTo; i++) {
+      if (bytes[i] === 0x0A) { nl = i; break; }
+    }
+    if (nl < 0) {
+      setStatus('Error: no header newline (not a 1dpcm file?)', true);
+      return;
+    }
+    const header = new TextDecoder('ascii').decode(bytes.subarray(0, nl)).trim();
+    if (header !== HEADER) {
+      setStatus('Error: bad header "' + header + '"', true);
+      return;
+    }
+
+    const data = bytes.subarray(nl + 1);
+    const frames = (data.length * 8) >>> 1;
+    if (frames === 0) {
+      setStatus('Error: file has no audio data', true);
+      return;
+    }
+
+    setStatus('Decoding ' + frames.toLocaleString() + ' frames ...');
+    await new Promise(r => setTimeout(r, 0));
+
+    ensureCtx();
+
+    let resampled = false;
+    let buf;
+    try {
+      buf = ctx.createBuffer(CHANNELS, frames, SR);
+      decodeInto(buf.getChannelData(0), buf.getChannelData(1), data);
+      duration = frames / SR;
+    } catch (e) {
+      const frames48 = frames >>> 2;
+      const Lt = new Float32Array(frames);
+      const Rt = new Float32Array(frames);
+      decodeInto(Lt, Rt, data);
+      buf = ctx.createBuffer(CHANNELS, frames48, 48000);
+      const L48 = buf.getChannelData(0);
+      const R48 = buf.getChannelData(1);
+      for (let i = 0; i < frames48; i++) {
+        const j = i << 2;
+        L48[i] = (Lt[j] + Lt[j+1] + Lt[j+2] + Lt[j+3]) * 0.25;
+        R48[i] = (Rt[j] + Rt[j+1] + Rt[j+2] + Rt[j+3]) * 0.25;
+      }
+      duration = frames48 / 48000;
+      resampled = true;
+    }
+
+    buffer = buf;
+    offset = 0;
+    playBtn.disabled = false;
+    seekEl.disabled = false;
+    seekEl.max = String(duration);
+    seekEl.value = '0';
+    updateTime(0);
+
+    dropEl.textContent = file.name;
+    dropEl.classList.add('loaded');
+    setStatus(
+      frames.toLocaleString() + ' frames  ·  ' + fmtTime(duration) +
+      '  ·  192 kHz stereo' + (resampled ? '  (output resampled to 48 kHz)' : '')
+    );
+  }
+
+  function updatePlayBtn() {
+    playBtn.textContent = playing ? '❚❚' : '▶';
+  }
+
+  function stopSource() {
+    if (source) {
+      try { source.onended = null; } catch (e) {}
+      try { source.stop(); }         catch (e) {}
+      try { source.disconnect(); }   catch (e) {}
+      source = null;
+    }
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
+  // Extracted function to handle node creation and the browser glitch
+  function startSource(pos) {
+    if (source) {
+      try { source.onended = null; } catch(e) {}
+      try { source.stop(); } catch(e) {}
+      try { source.disconnect(); } catch(e) {}
+    }
+    
+    source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    source.connect(gain);
+    
+    source.onended = function () {
+      if (!playing) return; // If we manually stopped it, ignore.
+      
+      const current = currentPos();
+      if (current < duration - 0.1) {
+        // The premature end glitch happened. Seamlessly restart at current position.
+        offset = current;
+        startSource(offset);
+      } else {
+        // Natural end of file
+        playing = false;
+        offset = 0;
+        source = null;
+        updatePlayBtn();
+        updateTime(0);
+        seekEl.value = '0';
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      }
+    };
+    
+    startedAt = ctx.currentTime;
+    source.start(0, pos);
+  }
+
+  function play() {
+    if (!buffer || playing) return;
+    ensureCtx();
+    if (offset >= duration - 0.001) offset = 0;
+    
+    playing = true;
+    startSource(offset);
+    updatePlayBtn();
+    tick();
+  }
+
+  function pause() {
+    if (!playing) return;
+    const pos = currentPos();
+    playing = false; // Set this before stopSource so onended knows it's intentional
+    stopSource();
+    offset = pos;
+    updatePlayBtn();
+    updateTime(offset);
+    seekEl.value = String(offset);
+  }
+
+  function seekTo(t) {
+    if (!buffer) return;
+    t = Math.max(0, Math.min(t, duration));
+    const wasPlaying = playing;
+    playing = false;
+    stopSource();
+    offset = t;
+    updateTime(offset);
+    seekEl.value = String(offset);
+    if (wasPlaying) play();
+  }
+
+  function setRate(newRate) {
+    if (newRate < RATE_MIN) newRate = RATE_MIN;
+    if (newRate > RATE_MAX) newRate = RATE_MAX;
+    
+    if (playing) {
+      // Snapshot current exact position, reset the timer reference
+      offset = currentPos();
+      startedAt = ctx.currentTime;
+    }
+    
+    rate = newRate;
+    
+    if (source) {
+      source.playbackRate.value = rate;
+    }
+    
+    rateLbl.textContent = rate.toFixed(2) + '×';
+  }
+
+  function tick() {
+    if (!playing) { rafId = null; return; }
+    if (!seeking) {
+      const pos = currentPos();
+      seekEl.value = String(pos);
+      updateTime(pos);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  playBtn.addEventListener('click', function () {
+    if (playing) pause(); else play();
+  });
+
+  dropEl.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function (e) {
+    if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  dropEl.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropEl.classList.add('drag');
+  });
+  dropEl.addEventListener('dragleave', function () {
+    dropEl.classList.remove('drag');
+  });
+  dropEl.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropEl.classList.remove('drag');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      loadFile(e.dataTransfer.files[0]);
+    }
+  });
+  dropEl.addEventListener('keydown', function (e) {
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  seekEl.addEventListener('pointerdown', function () { seeking = true; });
+  seekEl.addEventListener('pointerup',   function () { seeking = false; });
+  seekEl.addEventListener('input', function () {
+    updateTime(parseFloat(seekEl.value));
+  });
+  seekEl.addEventListener('change', function () {
+    seeking = false;
+    seekTo(parseFloat(seekEl.value));
+  });
+
+  volEl.addEventListener('input', function () {
+    if (gain) gain.gain.value = parseFloat(volEl.value);
+  });
+
+  speedEl.addEventListener('input', function () {
+    setRate(sliderToRate(parseInt(speedEl.value, 10)));
+  });
+  speedEl.addEventListener('dblclick', function () {
+    speedEl.value = '500';
+    setRate(1.0);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!buffer) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (playing) pause(); else play();
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      seekTo(currentPos() - 5);
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      seekTo(currentPos() + 5);
+    }
+  });
+
+  setRate(sliderToRate(parseInt(speedEl.value, 10)));
+
+  window.addEventListener('beforeunload', function () {
+    stopSource();
+    if (ctx) { try { ctx.close(); } catch (e) {} }
+  });
+})();
+</script>
+</body>
+</html>

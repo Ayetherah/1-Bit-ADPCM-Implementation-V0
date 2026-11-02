@@ -1,0 +1,5 @@
+ffmpeg -i input.wav -f f32le -acodec pcm_f32le output.raw
+
+24 bit,192kHz,stereo
+
+Python, reads raw f32le stereo 192k
